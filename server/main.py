@@ -210,7 +210,8 @@ async def ingest(owner: str, name: str, request: Request):
 
 ACTIONS = {"sweep": ("full", "a full sweep was requested"),
            "patrol": ("patrol", "a patrol was requested"),
-           "map": ("map", "a new map draft was requested")}
+           "map": ("map", "a new map draft was requested"),
+           "learn": ("map_update", "propose the map changes the crew has learned")}
 
 
 @app.post("/api/repos/{owner}/{name}/actions/{action}")

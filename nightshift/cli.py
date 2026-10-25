@@ -60,6 +60,10 @@ def cmd_wake(args):
               f"fix what's wrong, then run: nightshift map propose")
         return
 
+    if trigger == "map_update":
+        cmd_map(argparse.Namespace(action="propose", learned=True, args=[], note=None, why=None))
+        return
+
     if trigger == "resume" and cfg.current_task().get("repo") == repo.slug:
         task = cfg.current_task()
         print(f"Resuming: {task.get('reason', '')} ({payload.get('detail', 'a human acted on a PR')}).")
@@ -191,7 +195,16 @@ def _paths(repo, focus=None):
         report.post(repo, "bug_confirmed", {"bug_id": bug, "test_path": results[bug]["path"]})
     report.post(repo, "paths", {**state, "default_branch": gate.default_branch(repo),
                                 "map": {k: repo.config[k] for k in ("components", "links")}})
+    _post_learned(repo)
     return state
+
+
+def _post_learned(repo):
+    from nightshift import learn
+
+    items = learn.proposals(repo)
+    report.post(repo, "map_learned", {"proposals": items})
+    return items
 
 
 # ---- what's next ------------------------------------------------------------------------
@@ -327,9 +340,46 @@ def cmd_tidy(_args):
 
 
 def cmd_map(args):
-    from nightshift import repomap, workspace
+    from nightshift import learn, repomap, workspace
 
     repo = _repo()
+    if args.action == "note":
+        kinds = {"link": 2, "entry": 1, "asset": 1, "component": 2}
+        if not args.args or args.args[0] not in kinds or len(args.args) != kinds[args.args[0]] + 1:
+            sys.exit("usage: nightshift map note link <from> <to> | entry <component> | asset <component> "
+                     "| component <id> <path> [--why '...']")
+        kind, *rest = args.args
+        names = rest if kind == "link" else rest[:1]
+        unknown = [n for n in names if kind != "component" and n not in repo.config["components"]
+                   and not any(p.get("id") == n for p in learn.proposals(repo))]
+        if unknown:
+            sys.exit(f"unknown component {', '.join(unknown)}; see nightshift map show")
+        item = learn.note(repo, kind, rest[0], rest[1] if len(rest) > 1 else None, args.why or "")
+        _post_learned(repo)
+        print(f"RESULT: NOTED {learn.describe(item)}. It shows on the dashboard as a proposed map change.")
+        return
+    if args.action == "learned":
+        items = learn.proposals(repo)
+        for p in items:
+            print(f"  {learn.describe(p)}  ({p['source']}: {p['why']})")
+        print(f"{len(items)} proposed change{'s' if len(items) != 1 else ''} to the map.")
+        return
+    if args.action == "propose" and args.learned:
+        items = learn.proposals(repo)
+        if not items:
+            print("RESULT: NOT PROPOSED (the map matches the code; nothing learned)")
+            return
+        new = learn.apply(repo.config, items)
+        note = "The crew learned this since the map was merged:\n" + "\n".join(
+            f"- {learn.describe(p)}: {p['why']}" for p in items)
+        ok, message = workspace.propose_map(repo, new, note)
+        if ok:
+            report.post(repo, "map_drafted", {"summary": f"{len(items)} learned change(s) proposed", "pr": message})
+            print(f"RESULT: MAP UPDATE PROPOSED {message}")
+            print("HAND OFF: @Night Manager the map update is waiting for a human to review and merge.")
+        else:
+            print(f"RESULT: NOT PROPOSED ({message})")
+        return
     if args.action == "show":
         print(yaml.safe_dump({k: repo.config[k] for k in ("components", "links", "sensitive")}, sort_keys=False))
         return
@@ -419,9 +469,12 @@ def main(argv=None):
     p.set_defaults(fn=cmd_prove_branch)
     sub.add_parser("sync", help="make the shared checkout exactly GitHub's default branch").set_defaults(fn=cmd_sync)
     sub.add_parser("tidy", help="clear leftover fix branches and folders whose PR is gone").set_defaults(fn=cmd_tidy)
-    p = sub.add_parser("map", help="draft | propose | show the repository's component map")
-    p.add_argument("action", choices=["draft", "propose", "show"])
+    p = sub.add_parser("map", help="draft | propose | show | note | learned: the repository's component map")
+    p.add_argument("action", choices=["draft", "propose", "show", "note", "learned"])
+    p.add_argument("args", nargs="*", help="note: link <from> <to> | entry <c> | asset <c> | component <id> <path>")
     p.add_argument("--note", help="propose: a note for the PR description")
+    p.add_argument("--learned", action="store_true", help="propose: open a PR with what the crew learned since the map was merged")
+    p.add_argument("--why", help="note: the evidence, in one line")
     p.set_defaults(fn=cmd_map)
     sub.add_parser("patrol", help="show patrol risk scores").set_defaults(fn=cmd_patrol)
     p = sub.add_parser("report", help="send an event to the dashboard")

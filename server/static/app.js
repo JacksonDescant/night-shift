@@ -269,16 +269,14 @@ function renderRepo() {
     <div id="banners"></div>
     <section class="section"><div class="section-head"><h3>Crew</h3><span class="muted">${busy ? "working" : waitingCases(b).length ? "waiting on you" : "standing by"}</span></div>
       <ol class="pipeline" id="crew"></ol></section>
+    <section class="panel map section"><div class="panel-head"><h3>Attack paths</h3><span class="muted" id="map-note"></span></div>
+      <div id="map-body"></div></section>
     <section class="grid">
       <div class="panel"><div class="panel-head"><h3>Cases</h3><span class="muted">${liveCases(b).length || ""}</span></div>
         <div class="case-list" id="case-list" role="tablist"></div>
         <div class="panel-body" id="case-body"></div></div>
-      <div class="stack">
-        <div class="panel map"><div class="panel-head"><h3>Attack paths</h3><span class="muted" id="map-note"></span></div>
-          <div class="panel-body" id="map-body"></div></div>
-        <div class="panel"><div class="panel-head"><h3>Activity</h3></div>
-          <div class="panel-body"><ol class="activity" id="activity"></ol></div></div>
-      </div>
+      <div class="panel"><div class="panel-head"><h3>Activity</h3></div>
+        <div class="panel-body"><ol class="activity" id="activity"></ol></div></div>
     </section>`;
 
   document.querySelectorAll("[data-action]").forEach((btn) => btn.addEventListener("click", () => { btn.closest("details")?.removeAttribute("open"); action(btn.dataset.action); }));
@@ -453,6 +451,7 @@ function el(tag, attrs, parent) {
 function layout(config) {
   const comps = config.components || {};
   const ids = Object.keys(comps);
+  if (!ids.length) return { pos: {}, out: {}, W: 168, H: 58, width: 0, height: 0 };
   const out = Object.fromEntries(ids.map((id) => [id, []]));
   for (const [a, b] of config.links || []) if (out[a] && comps[b]) out[a].push(b);
   const depth = {};
@@ -478,21 +477,54 @@ function layout(config) {
   return { pos, out, W, H, width: 24 + cols.length * (W + GX) - GX, height: 24 + tallest * (H + GY) - GY };
 }
 
+function withProposals(config, proposals) {
+  // The committed map plus what the crew has learned since, marked so it draws dashed.
+  const out = { components: { ...config.components }, links: (config.links || []).map((l) => [...l]), proposed: new Set() };
+  for (const p of proposals) {
+    if (p.kind === "component" && !out.components[p.id]) {
+      out.components[p.id] = { name: p.name, paths: p.paths, entry: p.entry, asset: p.asset };
+      out.proposed.add(p.id);
+    }
+  }
+  for (const p of proposals) {
+    if (p.kind === "link" && out.components[p.from] && out.components[p.to]) {
+      out.links.push([p.from, p.to]);
+      out.proposed.add(`${p.from}>${p.to}`);
+    }
+  }
+  return out;
+}
+
+const KIND_TEXT = {
+  link: (p) => `${p.from} → ${p.to}`,
+  component: (p) => `new component ${p.id}`,
+  stale: (p) => `${p.path} is gone from ${p.component}`,
+  entry: (p) => `${p.component} is an entry point`,
+  asset: (p) => `${p.component} holds data`,
+};
+
+let selectedNode = null;
+
 function renderMap(b) {
   const config = b.map.config;
   const body = $("#map-body");
   if (!config || !Object.keys(config.components || {}).length) {
-    body.innerHTML = `<div class="empty"><b>No map yet</b>Once the crew maps the repository, its components and any attack paths through them show up here.</div>`;
+    body.innerHTML = `<div class="empty panel-body"><b>No map yet</b>Once the crew maps the repository, its components and any attack paths through them show up here.</div>`;
     $("#map-note").textContent = "";
     return;
   }
   const status = b.map.status || {};
+  const proposals = b.map.proposals || [];
+  const stats = b.map.stats || {};
+  const view = withProposals(config, proposals);
   const open = new Set(status.open_components || []);
   const reached = new Set(status.reached || []);
   const breachEdges = new Set((status.breach_paths || []).flatMap((p) => p.slice(1).map((n, i) => `${p[i]}>${n}`)));
   const fixComp = (status.open_bugs || {})[b.map.recommended_fix];
   const scanning = new Set(b.scanning ? b.patrol.components || [] : []);
-  const { pos, out, W, H, width, height } = layout(config);
+  const openCount = {};
+  for (const comp of Object.values(status.open_bugs || {})) openCount[comp] = (openCount[comp] || 0) + 1;
+  const { pos, out, W, H, width, height } = layout(view);
   const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": "Component map with attack paths" });
   const edges = el("g", {}, svg);
   for (const [a, targets] of Object.entries(out)) {
@@ -501,29 +533,144 @@ function renderMap(b) {
       if (!p || !q) continue;
       const x1 = p.x + W, y1 = p.y + H / 2, x2 = q.x, y2 = q.y + H / 2;
       const mx = (x1 + x2) / 2;
-      el("path", { class: `edge ${breachEdges.has(`${a}>${t}`) ? "breach" : ""}`, d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}` }, edges);
+      const cls = breachEdges.has(`${a}>${t}`) ? "breach" : view.proposed.has(`${a}>${t}`) ? "proposed" : "";
+      el("path", { class: `edge ${cls}`, d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}` }, edges);
     }
   }
-  for (const [id, comp] of Object.entries(config.components)) {
+  for (const [id, comp] of Object.entries(view.components)) {
     const p = pos[id];
     const cls = ["node", comp.entry && "entry", comp.asset && "asset", reached.has(id) && !comp.entry && "reached",
-      open.has(id) && "open", id === fixComp && "next", scanning.has(id) && "scanning"].filter(Boolean).join(" ");
-    const g = el("g", { class: cls, transform: `translate(${p.x},${p.y})` }, svg);
+      open.has(id) && "open", id === fixComp && "next", scanning.has(id) && "scanning",
+      view.proposed.has(id) && "proposed", id === selectedNode && "selected"].filter(Boolean).join(" ");
+    const g = el("g", { class: cls, transform: `translate(${p.x},${p.y})`, tabindex: 0, role: "button", "data-node": id }, svg);
     el("rect", { width: W, height: H, rx: 6 }, g);
     const name = el("text", { x: 10, y: 22 }, g);
-    name.textContent = (comp.name || id).slice(0, 22);
+    name.textContent = (comp.name || id).slice(0, openCount[id] ? 17 : 22);
+    if (openCount[id]) {
+      const n = el("text", { x: W - 10, y: 22, class: "count", "text-anchor": "end" }, g);
+      n.textContent = `${openCount[id]} open`;
+    }
     const sub = el("text", { x: 10, y: 40, class: "sub" }, g);
-    sub.textContent = [comp.entry && "entry point", comp.asset && "holds data", open.has(id) && "open bug"].filter(Boolean).join(" · ") || id;
-    el("title", {}, g).textContent = `${comp.name || id}\n${(comp.paths || []).join("\n")}`;
+    const st = stats[id];
+    sub.textContent = view.proposed.has(id) ? "proposed" :
+      [comp.entry && "entry", comp.asset && "data", st?.fixed && `${st.fixed} fixed`].filter(Boolean).join(" · ") || id;
   }
-  body.innerHTML = "";
-  body.appendChild(svg);
+  body.innerHTML = `<div class="map-layout"><div class="map-canvas"></div><div class="map-side"></div></div>`;
+  const canvas = $(".map-canvas", body), side = $(".map-side", body);
+  canvas.appendChild(svg);
   const breached = (status.breached_assets || []).length;
-  body.insertAdjacentHTML("beforeend", `
+  const learned = proposals.length ? `
+    <div class="learned">
+      <div class="learned-head"><b>Learned since the map was merged</b><span class="muted">${proposals.length} change${proposals.length > 1 ? "s" : ""}</span></div>
+      <ul>${proposals.slice(0, 6).map((p) => `<li><span class="tag ${p.source}">${p.source === "agent" ? "crew" : "code"}</span>
+        <span>${esc((KIND_TEXT[p.kind] || (() => p.kind))(p))}</span><small>${esc(p.why || "")}</small></li>`).join("")}
+        ${proposals.length > 6 ? `<li class="muted">and ${proposals.length - 6} more</li>` : ""}</ul>
+      ${b.map.update_pr ? `<a class="btn sm" href="${esc(prUrl(b.map.update_pr))}" target="_blank" rel="noopener">Review the map update</a>`
+        : `<button class="btn sm" id="learn-map">Propose a map update</button>`}
+    </div>` : "";
+  canvas.insertAdjacentHTML("beforeend", `
     <p class="why">${breached ? `<b>An attacker can reach ${esc(namesOf(b, status.breached_assets))}.</b> ` : ""}${esc(b.map.reason || "")}</p>
     <div class="legend"><span><i class="l-entry"></i>entry point</span><span><i class="l-asset"></i>holds data</span>
-    <span><i class="l-open"></i>open bug</span><span><i class="l-reached"></i>reachable</span><span><i class="l-next"></i>fix next</span></div>`);
+    <span><i class="l-open"></i>open bug</span><span><i class="l-reached"></i>reachable</span><span><i class="l-next"></i>fix next</span>
+    ${proposals.length ? `<span><i class="l-proposed"></i>learned</span>` : ""}</div>`);
+  side.innerHTML = `<div id="node-detail"></div>${learned}<div id="exposure"></div>
+    ${!proposals.length && (b.map.history || []).length < 2 && !selectedNode ? `<p class="muted side-hint">Click a component for what the crew has found in it.</p>` : ""}`;
+  $("#learn-map")?.addEventListener("click", () => action("learn"));
+  svg.querySelectorAll("[data-node]").forEach((node) => {
+    const pick = () => { selectedNode = selectedNode === node.dataset.node ? null : node.dataset.node; renderMap(data.board); };
+    node.addEventListener("click", pick);
+    node.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+  });
+  renderNodeDetail(b, view);
+  renderExposure(b);
   $("#map-note").textContent = b.scanning ? `checking ${namesOf(b, b.patrol.components)}` : "";
+}
+
+function prUrl(text) {
+  return (String(text).match(/https?:\/\/\S+/) || ["#"])[0];
+}
+
+function renderNodeDetail(b, view) {
+  const box = $("#node-detail");
+  const comp = view.components[selectedNode];
+  if (!comp) { box.innerHTML = ""; selectedNode = null; return; }
+  const st = (b.map.stats || {})[selectedNode] || {};
+  const openBugs = Object.entries(b.map.status?.open_bugs || {}).filter(([, c]) => c === selectedNode).map(([bug]) => bug);
+  const caseLink = (bug) => `<button class="link" data-goto-case="${esc(bug)}">${esc(b.cases[bug]?.title || bug)}</button>`;
+  const notes = (b.map.proposals || []).filter((p) => [p.id, p.from, p.to, p.component].includes(selectedNode));
+  box.innerHTML = `
+    <div class="node-detail">
+      <div class="nd-head"><div><span class="eyebrow">${view.proposed.has(selectedNode) ? "Proposed component" : "Component"}</span>
+        <b>${esc(comp.name || selectedNode)}</b></div><button class="btn icon sm" id="nd-close" aria-label="Close">×</button></div>
+      <div class="nd-stats">
+        <div><small>Findings</small><b>${st.findings || 0}</b></div><div><small>Dismissed</small><b>${st.dismissed || 0}</b></div>
+        <div><small>Proven</small><b>${st.proven || 0}</b></div><div><small>Fixed</small><b>${st.fixed || 0}</b></div>
+      </div>
+      <dl class="kv">
+        <dt>Paths</dt><dd>${(comp.paths || []).map(esc).join("<br>") || "–"}</dd>
+        <dt>Role</dt><dd>${[comp.entry && "entry point", comp.asset && "holds data"].filter(Boolean).join(", ") || "internal"}</dd>
+        <dt>Last checked</dt><dd>${esc(ago(st.last_checked))}</dd>
+        ${openBugs.length ? `<dt>Open bugs</dt><dd>${openBugs.map(caseLink).join("<br>")}</dd>` : ""}
+        ${(st.fixed_bugs || []).length ? `<dt>Fixed</dt><dd>${st.fixed_bugs.map(caseLink).join("<br>")}</dd>` : ""}
+        ${notes.length ? `<dt>Learned</dt><dd>${notes.map((p) => esc(`${(KIND_TEXT[p.kind] || (() => p.kind))(p)}: ${p.why}`)).join("<br>")}</dd>` : ""}
+      </dl>
+    </div>`;
+  $("#nd-close").addEventListener("click", () => { selectedNode = null; renderMap(data.board); });
+  box.querySelectorAll("[data-goto-case]").forEach((btn) => btn.addEventListener("click", () => {
+    if (!b.cases[btn.dataset.gotoCase]) return;
+    selectedCase = btn.dataset.gotoCase;
+    renderCases(b);
+    $("#case-list").scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
+}
+
+function renderExposure(b) {
+  const history = b.map.history || [];
+  const box = $("#exposure");
+  if (history.length < 2) { box.innerHTML = ""; return; }
+  const W = 360, H = 120, PAD = { l: 22, r: 6, t: 10, b: 20 };
+  const t0 = history[0].ts, t1 = Math.max(now(), history[history.length - 1].ts);
+  const max = Math.max(1, ...history.map((h) => h.reached));
+  const x = (ts) => PAD.l + ((ts - t0) / Math.max(1, t1 - t0)) * (W - PAD.l - PAD.r);
+  const y = (v) => PAD.t + (1 - v / max) * (H - PAD.t - PAD.b);
+  let d = `M${x(history[0].ts)},${y(history[0].reached)}`;
+  history.slice(1).forEach((h) => { d += ` H${x(h.ts)} V${y(h.reached)}`; });
+  d += ` H${x(t1)}`;
+  const last = history[history.length - 1];
+  const breaches = history.filter((h) => h.breaches);
+  box.innerHTML = `
+    <div class="exposure">
+      <div class="exp-head"><b>Exposure over time</b><span class="muted">${last.reached} component${last.reached === 1 ? "" : "s"} reachable now</span></div>
+      <div class="exp-plot">
+        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Components an attacker can reach, over time">
+          <line class="exp-grid" x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(0)}" y2="${y(0)}"/>
+          <line class="exp-grid" x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(max)}" y2="${y(max)}"/>
+          <text class="exp-axis" x="${PAD.l - 6}" y="${y(max) + 3}" text-anchor="end">${max}</text>
+          <text class="exp-axis" x="${PAD.l - 6}" y="${y(0) + 3}" text-anchor="end">0</text>
+          <path class="exp-line" d="${d}"/>
+          ${breaches.map((h) => `<circle class="exp-breach" cx="${x(h.ts)}" cy="${y(h.reached)}" r="4"/>`).join("")}
+          <line class="exp-cross hidden" id="exp-cross" y1="${PAD.t}" y2="${H - PAD.b}" x1="0" x2="0"/>
+          <text class="exp-axis" x="${PAD.l}" y="${H - 4}">${esc(ago(t0))}</text>
+          <text class="exp-axis" x="${W - PAD.r}" y="${H - 4}" text-anchor="end">now</text>
+        </svg>
+        <div class="exp-tip hidden" id="exp-tip" role="status"></div>
+      </div>
+      <small class="muted">Components an attacker can reach through open bugs. <span class="exp-key"><i></i>a path reached an asset</span></small>
+    </div>`;
+  const plot = $(".exp-plot", box), svgEl = $("svg", plot), tip = $("#exp-tip"), cross = $("#exp-cross");
+  plot.addEventListener("mousemove", (e) => {
+    const r = svgEl.getBoundingClientRect();
+    const vx = ((e.clientX - r.left) / r.width) * W;
+    let h = history[0];
+    for (const item of history) if (x(item.ts) <= vx) h = item;
+    cross.setAttribute("x1", x(h.ts)); cross.setAttribute("x2", x(h.ts));
+    cross.classList.remove("hidden");
+    tip.innerHTML = `<b>${new Date(h.ts * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</b>
+      ${h.reached} reachable · ${h.open} open bug${h.open === 1 ? "" : "s"}${h.breaches ? ` · <span class="bad">${h.breaches} breach path${h.breaches > 1 ? "s" : ""}</span>` : ""}`;
+    tip.classList.remove("hidden");
+    tip.style.left = `${Math.min(Math.max(0, e.clientX - r.left + 12), r.width - 180)}px`;
+  });
+  plot.addEventListener("mouseleave", () => { tip.classList.add("hidden"); cross.classList.add("hidden"); });
 }
 
 function renderActivity(b) {
@@ -538,7 +685,7 @@ function renderActivity(b) {
 async function action(name, body) {
   try {
     await api(`/api/repos/${current}/actions/${name}`, { method: "POST", body: JSON.stringify(body || {}) });
-    toast({ sweep: "Full sweep requested", patrol: "Patrol requested", map: "New map draft requested", fix: "Asked the crew to fix it" }[name]);
+    toast({ sweep: "Full sweep requested", patrol: "Patrol requested", map: "New map draft requested", fix: "Asked the crew to fix it", learn: "Asked the crew to propose a map update" }[name]);
   } catch (err) {
     toast(err.message);
   }

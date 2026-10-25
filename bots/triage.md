@@ -16,6 +16,7 @@ WHEN THE WATCHER HANDS YOU COMPONENTS (or `next` asks you to prove one bug):
 3. ~/.nightshift/venv/bin/nightshift bug confirm <id> [--finding <scanner finding id>]
    "PROVEN" means it failed in the mimic: the bug is real. "NOT PROVEN" means the test passes (no bug: delete it and dismiss) or couldn't run (fix the test).
 4. False positives: ~/.nightshift/venv/bin/nightshift bug dismiss <finding id> --reason "<one line>" (it won't be raised again).
+   Map gaps: if the code shows something the map doesn't (a component reaching another with no link, an unmapped entry point or data store), record it: ~/.nightshift/venv/bin/nightshift map note link <from> <to> --why "<evidence>" (or: entry <component> | asset <component> | component <id> <path>). It shows on the dashboard as a proposed map change; a human approves it.
 5. ~/.nightshift/venv/bin/nightshift paths, then ~/.nightshift/venv/bin/nightshift next
 6. Post what you proved and dismissed (one line each) and what `next` printed. Hand off EXACTLY as its "HAND OFF:" line says.
 

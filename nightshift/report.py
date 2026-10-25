@@ -16,7 +16,7 @@ from nightshift.config import load_env
 EVENT_TYPES = {
     "patrol_started", "patrol_done", "scan_started", "scan_done", "finding_triaged", "bug_confirmed",
     "paths", "pr_opened", "bug_fixed", "gate_result", "escalated", "auto_merged", "chat", "push",
-    "review_merged", "review_declined", "map_drafted",
+    "review_merged", "review_declined", "map_drafted", "map_learned",
 }
 
 
@@ -39,6 +39,8 @@ def enrich(repo, event_type, data):
             finding = next((f for f in findings if components.finding_in(repo, f, [data["component"]])), None)
         if finding:
             data.update({k: finding[k] for k in ("tool", "rule", "file", "line", "message")})
+            if finding.get("component"):
+                data.setdefault("component", finding["component"])
     elif event_type == "bug_confirmed" and data.get("test_path"):
         data.setdefault("test_code", _read(repo.root / data["test_path"], 2500))
         proof = (repo.read_state("proofs.json", {}) or {}).get(data.get("bug_id", ""), {})

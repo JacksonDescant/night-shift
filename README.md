@@ -107,6 +107,12 @@ autonomy:
 
 The built-in sensitive list always applies: dependency manifests and lockfiles, migrations, `.github/`, Dockerfiles, and `nightshift.yaml` itself.
 
+### A living map
+
+Code moves on after the map is merged, and the crew learns things while it reads it. Every check compares the map with the code: new code no component owns, imports that link components the map doesn't, and paths that no longer exist. Triage Guard also records what it notices (`nightshift map note link orders billing --why "..."`).
+
+The dashboard shows all of it on the attack map as dashed, proposed changes, next to what each component has seen so far: findings, dismissals, proven bugs, fixes, and when it was last checked. Click a component for its details. An exposure timeline shows how many components an attacker could reach over time. **Propose a map update** has the crew open a PR with what it learned; the attack paths and the gate use the new map once you merge it.
+
 ## Proofs
 
 A proof is an ordinary pytest file. Its docstring names the bug and the component it lives in:
@@ -130,6 +136,7 @@ The crew drives everything through one CLI, one step per command. Commands that 
 |---|---|
 | `nightshift wake '<json>'` | The Watcher's whole job: clone or sync, tidy, pick components for the trigger (push, patrol, full, bug, resume, map), scan, save the task |
 | `nightshift map draft \| propose \| show` | Draft the component map, propose it as a PR, or print it |
+| `nightshift map note \| learned` / `map propose --learned` | Record something the map is missing, list what the crew has learned, or open a PR with it |
 | `nightshift scan [--components a,b]` | Semgrep, Bandit, gitleaks and pip-audit, scoped to components, minus known false positives |
 | `nightshift bug confirm <id>` / `bug dismiss <finding>` | Prove a bug in the mimic, or dismiss a false positive for good |
 | `nightshift paths` | Run every proof, compute attack paths and the most valuable fix |
