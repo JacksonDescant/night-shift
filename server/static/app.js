@@ -454,25 +454,46 @@ function layout(config) {
   if (!ids.length) return { pos: {}, out: {}, W: 168, H: 58, width: 0, height: 0 };
   const out = Object.fromEntries(ids.map((id) => [id, []]));
   for (const [a, b] of config.links || []) if (out[a] && comps[b]) out[a].push(b);
-  const depth = {};
-  const queue = ids.filter((id) => comps[id].entry);
-  queue.forEach((id) => (depth[id] = 0));
-  while (queue.length) {
-    const id = queue.shift();
-    for (const next of out[id]) if (depth[next] === undefined) { depth[next] = depth[id] + 1; queue.push(next); }
+  // Columns by longest path from a starting point (entry points, or anything nothing links to),
+  // so every link points rightward; data stores with no outgoing links go in the last column.
+  const incoming = new Set(Object.values(out).flat());
+  const starts = ids.filter((id) => comps[id].entry || !incoming.has(id));
+  const depth = Object.fromEntries((starts.length ? starts : ids.slice(0, 1)).map((id) => [id, 0]));
+  for (let pass = 0; pass < ids.length; pass++) {
+    let moved = false;
+    for (const a of ids) {
+      if (depth[a] === undefined) continue;
+      for (const b of out[a]) {
+        if (!comps[b].entry && (depth[b] === undefined || depth[b] < depth[a] + 1) && depth[a] + 1 < ids.length) {
+          depth[b] = depth[a] + 1;
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
   }
   const maxDepth = Math.max(0, ...Object.values(depth));
-  ids.forEach((id) => { if (depth[id] === undefined) depth[id] = comps[id].asset ? maxDepth + 1 : maxDepth + 1; });
+  ids.forEach((id) => {
+    if (depth[id] === undefined) depth[id] = maxDepth;
+    if (comps[id].asset && !out[id].length) depth[id] = Math.max(maxDepth, 1);
+  });
   const columns = {};
   ids.forEach((id) => (columns[depth[id]] = columns[depth[id]] || []).push(id));
   const W = 168, H = 58, GX = 52, GY = 18;
   const pos = {};
   const cols = Object.keys(columns).map(Number).sort((a, b) => a - b);
   const tallest = Math.max(...cols.map((c) => columns[c].length));
+  const row = {};
   cols.forEach((c, ci) => {
-    const list = columns[c].sort();
+    // Order each column by where its parents sit, which keeps links from crossing.
+    const parents = (id) => ids.filter((a) => out[a].includes(id) && row[a] !== undefined).map((a) => row[a]);
+    const key = (id) => { const p = parents(id); return p.length ? p.reduce((x, y) => x + y, 0) / p.length : Infinity; };
+    const list = columns[c].sort((a, b) => (ci ? key(a) - key(b) : 0) || (comps[a].entry ? -1 : 0) - (comps[b].entry ? -1 : 0) || a.localeCompare(b));
     const offset = ((tallest - list.length) * (H + GY)) / 2;
-    list.forEach((id, ri) => (pos[id] = { x: 12 + ci * (W + GX), y: 12 + offset + ri * (H + GY) }));
+    list.forEach((id, ri) => {
+      row[id] = offset / (H + GY) + ri;
+      pos[id] = { x: 12 + ci * (W + GX), y: 12 + offset + ri * (H + GY) };
+    });
   });
   return { pos, out, W, H, width: 24 + cols.length * (W + GX) - GX, height: 24 + tallest * (H + GY) - GY };
 }

@@ -8,6 +8,12 @@
 
 Security scanners hand you a list. Night Shift hands you **evidence**: a test that fails on your current code, a minimal fix, the same test passing on the fix, and a record of exactly why the fix was or wasn't safe to merge without you.
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/overview-light.png">
+  <img alt="The Night Shift dashboard for a repository: crew status, an escalated fix waiting for review, and the four agents' progress" src="docs/images/overview.png">
+</picture>
+<sub>Screenshots show a fictional demo repository.</sub>
+
 It's built for teams that want an always-on security reviewer without giving an AI the keys to production.
 
 ## How it works
@@ -45,11 +51,15 @@ A fix merges itself only when **all five** hold, checked in clean git worktrees 
 
 Anything else is escalated: the PR stays open, the dashboard lists it under *Waiting for you* with the failed rules, and the crew moves on to other work. When you merge or close it on GitHub, the dashboard notices and the crew carries on.
 
+<p align="center"><img alt="A case: the scanner finding, the failing proof, the three-line fix, and all five gate checks passing before the crew merged it" src="docs/images/case.png" width="560"></p>
+
 ### Attack paths, not just findings
 
 Individually minor bugs matter when they line up. Night Shift keeps a **map** of each repository: its components, which ones face the internet (*entry points*), where the valuable data lives (*assets*), and how components reach each other. A proven bug lets an attacker cross into its component; a chain of them from an entry point to an asset is a **breach path**.
 
 The crew uses the map to decide what to fix first. If a breach path exists, it finds the smallest set of fixes that cuts every one. Otherwise, it picks the fix that pushes an attacker back the furthest. Patrols spend attention on the components closest to assets, recently changed, or buggy before.
+
+![The attack map: two open bugs line up into a path from the public API to the database, next to map changes the crew learned and exposure over time](docs/images/attack-paths.png)
 
 ## Safety model
 
@@ -71,6 +81,8 @@ git clone https://github.com/JacksonDescant/night-shift.git && cd night-shift
 That one script installs Night Shift, starts the dashboard at http://127.0.0.1:8000 with a public tunnel the crew can reach (it installs `cloudflared` with Homebrew if needed), and opens the dashboard. Keep it running while the crew works; run it again to start the dashboard later.
 
 The first time, the dashboard opens on **Set up the crew**: six short steps in Grok Bot (create the four Bots, their group chat, the Watcher's routine), each with the values already filled in and a copy button. Then **connect a repository** with owner/name and a fine-grained token for it. The crew drafts a map of the repository and opens it as a PR; review and merge it, and from then on every push, patrol or full sweep wakes the crew.
+
+![The crew setup page: each step with its values filled in and a copy button](docs/images/crew-setup.png)
 
 The same steps, with background and troubleshooting, are in [docs/crew-setup.md](docs/crew-setup.md). To work on Night Shift itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

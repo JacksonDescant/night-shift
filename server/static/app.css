@@ -288,8 +288,8 @@ pre.diff .hunk { color: var(--muted); }
 .node .sub { fill: var(--muted); font: 10px var(--mono); }
 .node.entry rect { stroke: var(--info); }
 .node.asset rect { stroke: var(--text); stroke-width: 1.6; }
-.node.reached rect { fill: var(--warn-soft); stroke: var(--warn); }
-.node.open rect { fill: var(--bad-soft); stroke: var(--bad); }
+.node.reached rect { fill: color-mix(in srgb, var(--warn) 10%, var(--surface)); stroke: var(--warn); }
+.node.open rect { fill: color-mix(in srgb, var(--bad) 10%, var(--surface)); stroke: var(--bad); }
 .node.next rect { stroke-dasharray: 4 3; stroke: var(--text); stroke-width: 1.6; }
 .node.scanning rect { animation: pulse 1.2s infinite; }
 .edge { stroke: var(--border-strong); stroke-width: 1.2; fill: none; }
@@ -305,7 +305,7 @@ pre.diff .hunk { color: var(--muted); }
 .node:hover rect, .node:focus-visible rect { stroke: var(--text); }
 .node.selected rect { stroke: var(--text); stroke-width: 2; }
 .node .count { fill: var(--bad); font: 500 10.5px var(--mono); }
-.node.proposed rect { fill: transparent; stroke-dasharray: 3 3; stroke: var(--muted); }
+.node.proposed rect { fill: var(--bg); stroke-dasharray: 3 3; stroke: var(--muted); }
 .node.proposed text { fill: var(--muted); }
 .edge.proposed { stroke: var(--muted); stroke-dasharray: 3 3; }
 .legend .l-proposed { border-color: var(--muted); border-style: dashed; }
