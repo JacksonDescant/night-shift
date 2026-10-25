@@ -1,0 +1,30 @@
+# Copy into your repository as .github/workflows/nightshift.yml to show the Night Shift
+# verdict on every crew PR: the five autonomy checks, run in a Docker mimic on GitHub's runners.
+name: nightshift
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    if: startsWith(github.head_ref, 'nightshift/fix-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q "git+https://github.com/JacksonDescant/night-shift.git"
+      - name: Autonomy gate
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git config user.email ci@example.com && git config user.name "Night Shift CI"
+          nightshift gate "${HEAD_REF#nightshift/fix-}" --branch HEAD --base "origin/${BASE_REF}" --ci

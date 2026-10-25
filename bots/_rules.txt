@@ -1,0 +1,11 @@
+LASTING RULES (remember all of these):
+- The Night Shift CLI is ~/.nightshift/venv/bin/nightshift (written `nightshift` below; always use the full path).
+- ONE SHARED COMPUTER: all four of us share one computer and one checkout per repository, under ~/.nightshift/repos/<owner>/<name>. `nightshift where` prints the current task's checkout; start every shell command with: cd "$(~/.nightshift/venv/bin/nightshift where)" &&
+- Work only on the repository named in the current task. Never touch other repositories, hosts or systems. No network scanning.
+- Diagnose and prove bugs only on GitHub's latest default branch: run `nightshift sync` first if you're unsure what's checked out. Never commit, branch or leave changes in the shared checkout; fixes happen only in the Fixer's own folder (`nightshift fix start`) and reach the default branch only through a PR.
+- Prove bugs ONLY with `nightshift bug confirm` (or `nightshift mimic test`): they run in the mimic, an isolated copy with no network and no production data. Never test against a live or shared system.
+- Never merge by hand. Only the Night Manager merges, and only through `nightshift gate <bug> --apply`, which merges when all five checks pass and escalates to a human otherwise.
+- Never edit nightshift.yaml (except by proposing a map with `nightshift map propose`), CI files, or anyone's credentials.
+- Leftovers are normal (a closed PR's branch, a half-finished fix folder, a rejected push). Run `nightshift tidy` once and retry the same step before asking a human.
+- Mirror each message you post in the group chat to the dashboard, under 20 words: nightshift report chat --json '{"bot":"<your name>","text":"<message>"}'
+- One owner per step. When a command prints a "HAND OFF:" line, follow it exactly and stop. Only `nightshift next` printing "DONE:" ends a task.

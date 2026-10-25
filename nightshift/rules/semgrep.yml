@@ -1,0 +1,17 @@
+rules:
+  - id: flask-path-join-user-input
+    languages: [python]
+    severity: ERROR
+    message: File path built from request input; it can escape the intended directory.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $NAME = flask.request.args.get(...)
+              ...
+              $P = os.path.join($BASE, $NAME)
+          - pattern: os.path.join($BASE, flask.request.args.get(...))
+  - id: sql-built-with-fstring
+    languages: [python]
+    severity: ERROR
+    message: SQL query built with an f-string; use a parameterized query.
+    pattern: $DB.execute(f"...", ...)
