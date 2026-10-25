@@ -7,13 +7,14 @@ const STAGES = [
   ["verified", "Checked by the autonomy gate", "Night Manager"],
   ["closed", "Closed", "Night Manager"],
 ];
-const STATE_LABEL = { idle: "Idle", working: "Working", done: "Done", waiting: "Waiting for a human" };
+const STATE_LABEL = { idle: "Idle", working: "Working", done: "Done", waiting: "Needs you" };
 const NS = "http://www.w3.org/2000/svg";
 
 let repos = [];
 let current = null;   // "owner/name"
 let data = null;      // {repo, board}
 let selectedCase = null;
+let view = null;      // "setup" | "connect" | "repo"
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -53,12 +54,15 @@ async function route() {
     current = hash.slice(5);
     if (!repos.find((r) => r.slug === current)) { location.hash = "#/"; return; }
     selectedCase = null;
+    view = "repo";
     await loadRepo();
   } else if (hash === "setup" || (!repos.length && hash !== "connect" && !(await crewReady()))) {
     current = null;
+    view = "setup";
     await renderSetup();
   } else if (hash === "connect" || !repos.length) {
     current = null;
+    view = "connect";
     renderConnect();
   } else {
     location.hash = `#/repo/${repos[0].slug}`;
@@ -71,8 +75,9 @@ function renderSwitch() {
   $("#repo-switch").innerHTML = repos.map((r) => {
     const s = r.summary;
     const dot = s.breached ? "bad" : s.waiting ? "warn" : s.busy ? "busy" : s.mapped ? "ok" : "";
-    return `<a href="#/repo/${esc(r.slug)}" class="${r.slug === current ? "active" : ""}"><span class="dot ${dot}"></span>${esc(r.slug)}</a>`;
-  }).join("");
+    return `<a href="#/repo/${esc(r.slug)}" class="side-link ${r.slug === current ? "active" : ""}"><span class="dot ${dot}"></span><span class="truncate">${esc(r.slug)}</span></a>`;
+  }).join("") || `<p class="side-empty">None yet</p>`;
+  document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("active", view === a.dataset.nav));
 }
 
 // ---- crew setup -------------------------------------------------------------------------
@@ -91,7 +96,7 @@ const RULES = "Allow automatically: running ~/.nightshift/venv/bin/nightshift co
 function copyBlock(text, label = "Copy") {
   const id = `copy-${copyBlock.n = (copyBlock.n || 0) + 1}`;
   copyBlock.texts[id] = text;
-  return `<div class="copy-block"><pre>${esc(text)}</pre><button type="button" class="btn ghost" data-copy-text="${id}">${esc(label)}</button></div>`;
+  return `<div class="copy-block"><pre>${esc(text)}</pre><button type="button" class="btn sm" data-copy-text="${id}">${esc(label)}</button></div>`;
 }
 copyBlock.texts = {};
 
@@ -101,11 +106,12 @@ async function renderSetup() {
   const server = s.public_url || "<your dashboard's public URL>";
   const install = `curl -fsSL https://raw.githubusercontent.com/JacksonDescant/night-shift/main/scripts/install-crew.sh | ` +
     `NIGHTSHIFT_SERVER="${server}" NIGHTSHIFT_TOKEN="${s.ingest_token}" bash`;
-  const step = (n, title, body) => `<li class="setup-step"><span class="mark">${n}</span><div><h2>${title}</h2>${body}</div></li>`;
+  const step = (n, title, body) => `<li class="setup-step"><span class="mark">${String(n).padStart(2, "0")}</span><div><h2>${title}</h2>${body}</div></li>`;
   $("#view").innerHTML = `
     <section class="setup card">
       <div class="card-body">
         <div>
+          <div class="eyebrow">One-time setup</div>
           <h1>Set up the crew</h1>
           <p class="muted">Night Shift's crew is four <a href="https://cursor.com/help/grok-bot/faqs" target="_blank" rel="noopener">Grok Bots</a>.
           Do this once, top to bottom; every value below is already filled in for this dashboard.</p>
@@ -116,7 +122,7 @@ async function renderSetup() {
             only the repositories you'll connect; Contents and Pull requests, read and write. Keep it handy for step 4, and don't paste it into a chat.</p>`)}
           ${step(2, "Create the four Bots", `<p class="muted">For each: in Grok Bot, <b>+ → Create new Bot</b> with this name, then paste its instructions as the first message.</p>
             <div class="bot-prompts">${s.bots.map((b) => `<div class="bot-prompt"><b>${esc(b.name)}</b>
-              <button type="button" class="btn ghost" data-copy-text="${(copyBlock.texts[`bot-${b.key}`] = b.prompt, `bot-${b.key}`)}">Copy instructions</button></div>`).join("")}</div>`)}
+              <button type="button" class="btn sm" data-copy-text="${(copyBlock.texts[`bot-${b.key}`] = b.prompt, `bot-${b.key}`)}">Copy instructions</button></div>`).join("")}</div>`)}
           ${step(3, "Make their group chat", `<p class="muted">Create a group chat named <b>Night Shift</b> with all four Bots and send:</p>${copyBlock(GROUP)}`)}
           ${step(4, "Set up the Bots' computer", `<p class="muted">In any Bot's chat choose <b>Take over</b>, open a terminal, and run these two. The first asks for the token from step 1 (paste, Enter, Ctrl-D).</p>
             ${copyBlock("gh auth login --with-token")}${copyBlock(install)}<p class="muted">Every line should end <code>[ok]</code>.</p>`)}
@@ -128,7 +134,7 @@ async function renderSetup() {
             </form>`)}
           ${step(6, "Stop approvals from stalling it", `<p class="muted">In Grok Bot, <b>Settings → General → Auto-review → Custom Rules</b>, add:</p>${copyBlock(RULES)}`)}
         </ol>
-        <div><a class="btn primary" href="#/connect">Connect a repository</a></div>
+        <div><a class="btn primary lg" href="#/connect">Connect a repository</a></div>
       </div>
     </section>`;
   $("#setup-form").addEventListener("submit", async (e) => {
@@ -150,6 +156,7 @@ function renderConnect() {
     <section class="connect card">
       <div class="card-body">
         <div>
+          <div class="eyebrow">New repository</div>
           <h1>Connect a repository</h1>
           <p class="muted">Night Shift's crew of four Grok Bots maps the repository, proves bugs with failing tests in an
           isolated environment, fixes them, and merges a fix on its own only when five safety checks pass. Everything else waits for you.</p>
@@ -169,12 +176,12 @@ function renderConnect() {
             <li>Metadata: read (added automatically)</li>
           </ul>
           <div id="connect-error" class="error hidden" role="alert"></div>
-          <div><button class="btn primary" id="connect-btn">Connect</button></div>
+          <div><button class="btn primary lg" id="connect-btn">Connect</button></div>
         </form>
         <div class="how">
-          <div><b>1. Map</b>The crew drafts a map of components, entry points and where data lives, and opens it as a PR for you.</div>
-          <div><b>2. Prove</b>Every suspected bug gets a test that fails in an isolated mimic before anything changes.</div>
-          <div><b>3. Fix</b>Small, local, provable fixes merge themselves. Anything touching auth or dependencies waits for you.</div>
+          <div><span class="eyebrow">01</span><b>Map</b>The crew drafts a map of components, entry points and where data lives, and opens it as a PR for you.</div>
+          <div><span class="eyebrow">02</span><b>Prove</b>Every suspected bug gets a test that fails in an isolated mimic before anything changes.</div>
+          <div><span class="eyebrow">03</span><b>Fix</b>Small, local, provable fixes merge themselves. Anything touching auth or dependencies waits for you.</div>
         </div>
       </div>
     </section>`;
@@ -221,8 +228,9 @@ function renderRepo() {
   const openCount = Object.keys(status.open_bugs || {}).length;
   const breached = (status.breached_assets || []).length;
   const busy = CREW.some((n) => b.crew[n].state === "working");
+  const [owner, name] = repo.slug.split("/");
   const chips = [
-    `<span class="chip">${esc(repo.default_branch)}</span>`,
+    `<span class="chip mono">${esc(repo.default_branch)}</span>`,
     repo.private ? `<span class="chip">private</span>` : "",
     b.map.config ? `<span class="chip ok">mapped</span>` : `<span class="chip warn">no map yet</span>`,
     breached ? `<span class="chip bad">attack path to ${breached} asset${breached > 1 ? "s" : ""}</span>` : "",
@@ -233,39 +241,47 @@ function renderRepo() {
   $("#view").innerHTML = `
     <section class="repo-head">
       <div>
-        <h1><a href="${esc(repo.url)}" target="_blank" rel="noopener">${esc(repo.slug)}</a></h1>
+        <div class="eyebrow">Repository</div>
+        <h1><a href="${esc(repo.url)}" target="_blank" rel="noopener"><span class="owner">${esc(owner)} /</span> ${esc(name)}</a></h1>
         ${repo.description ? `<p class="muted">${esc(repo.description)}</p>` : ""}
         <div class="chips">${chips}</div>
       </div>
       <div class="actions">
-        <button class="btn" data-action="sweep" title="Check every component">Full sweep</button>
         <button class="btn" data-action="patrol" title="Check the riskiest components">Patrol</button>
-        <button class="btn ghost" data-action="map" title="Draft the map again">Redraft map</button>
-        <button class="btn ghost" id="show-hook">Push webhook</button>
-        <button class="btn ghost danger" id="disconnect">Disconnect</button>
+        <button class="btn primary" data-action="sweep" title="Check every component">Full sweep</button>
+        <details class="menu">
+          <summary class="btn icon" aria-label="More actions"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></summary>
+          <div class="menu-list">
+            <button data-action="map">Redraft the map</button>
+            <button id="show-hook">Push webhook</button>
+            <button id="disconnect" class="danger">Disconnect</button>
+          </div>
+        </details>
       </div>
     </section>
-    <section class="metrics">
-      ${metric("Push → proof", dur(m.push_to_proof))}
-      ${metric("Push → merged", dur(m.push_to_merge))}
+    <section class="stats">
+      ${metric("Push to proof", dur(m.push_to_proof))}
+      ${metric("Push to merge", dur(m.push_to_merge))}
       ${metric("Merged by the crew", m.auto_merges)}
       ${metric("Human reviews", m.human_touches)}
       ${metric("False alarms dismissed", m.dismissed)}
     </section>
     <div id="banners"></div>
-    <section class="crew" id="crew"></section>
+    <section class="section"><div class="section-head"><h3>Crew</h3><span class="muted">${busy ? "working" : waitingCases(b).length ? "waiting on you" : "standing by"}</span></div>
+      <ol class="pipeline" id="crew"></ol></section>
     <section class="grid">
-      <div class="card"><div class="card-head"><h3>Cases</h3><div class="case-list" id="case-list" role="tablist"></div></div>
-        <div class="card-body" id="case-body"></div></div>
+      <div class="panel"><div class="panel-head"><h3>Cases</h3><span class="muted">${liveCases(b).length || ""}</span></div>
+        <div class="case-list" id="case-list" role="tablist"></div>
+        <div class="panel-body" id="case-body"></div></div>
       <div class="stack">
-        <div class="card map"><div class="card-head"><h3>Attack paths</h3><span class="muted" id="map-note"></span></div>
-          <div class="card-body" id="map-body"></div></div>
-        <div class="card"><div class="card-head"><h3>Activity</h3></div>
-          <div class="card-body"><ol class="activity" id="activity"></ol></div></div>
+        <div class="panel map"><div class="panel-head"><h3>Attack paths</h3><span class="muted" id="map-note"></span></div>
+          <div class="panel-body" id="map-body"></div></div>
+        <div class="panel"><div class="panel-head"><h3>Activity</h3></div>
+          <div class="panel-body"><ol class="activity" id="activity"></ol></div></div>
       </div>
     </section>`;
 
-  document.querySelectorAll("[data-action]").forEach((btn) => btn.addEventListener("click", () => action(btn.dataset.action)));
+  document.querySelectorAll("[data-action]").forEach((btn) => btn.addEventListener("click", () => { btn.closest("details")?.removeAttribute("open"); action(btn.dataset.action); }));
   $("#show-hook").addEventListener("click", showHook);
   $("#disconnect").addEventListener("click", disconnect);
   renderBanners(b);
@@ -276,7 +292,7 @@ function renderRepo() {
 }
 
 function metric(label, value) {
-  return `<div class="card metric"><small>${esc(label)}</small><b>${esc(value)}</b></div>`;
+  return `<div class="stat"><small>${esc(label)}</small><b>${esc(value)}</b></div>`;
 }
 
 function renderBanners(b) {
@@ -316,12 +332,12 @@ function namesOf(b, ids) {
 function renderCrew(b) {
   $("#crew").innerHTML = CREW.map((name, i) => {
     const bot = b.crew[name];
-    return `<article class="card bot ${bot.state}">
-      <div class="bot-top"><b>${esc(name)}</b><time id="timer-${i}"></time></div>
+    return `<li class="bot ${bot.state}">
+      <div class="bot-top"><span class="bot-n">0${i + 1}</span><span class="state ${bot.state}">${esc(STATE_LABEL[bot.state] || bot.state)}</span><time id="timer-${i}"></time></div>
+      <b>${esc(name)}</b>
       <small>${esc(bot.role)}</small>
-      <span class="state ${bot.state}">${esc(STATE_LABEL[bot.state] || bot.state)}</span>
       <div class="bot-step">${esc(bot.step || (bot.state === "idle" ? "Waiting for a push or a patrol" : ""))}</div>
-    </article>`;
+    </li>`;
   }).join("");
   tick();
 }
@@ -353,8 +369,10 @@ function renderCases(b) {
   if (!cases.find((c) => c.bug === selectedCase)) selectedCase = cases[0]?.bug || null;
   $("#case-list").innerHTML = cases.map((c) => {
     const [kind] = caseStatus(c);
-    return `<button class="case-pill" role="tab" aria-selected="${c.bug === selectedCase}" data-case="${esc(c.bug)}">
-      <span class="dot ${kind === "ok" ? "ok" : kind === "warn" ? "warn" : "busy"}"></span>${esc(c.bug)}</button>`;
+    const [, label] = caseStatus(c);
+    return `<button class="case-row" role="tab" aria-selected="${c.bug === selectedCase}" data-case="${esc(c.bug)}">
+      <span class="dot ${kind === "ok" ? "ok" : kind === "warn" ? "warn" : "busy"}"></span><span class="truncate">${esc(c.title)}</span>
+      <small>${esc(label)}</small></button>`;
   }).join("");
   document.querySelectorAll("[data-case]").forEach((el) => el.addEventListener("click", () => { selectedCase = el.dataset.case; renderCases(data.board); }));
 
@@ -368,8 +386,8 @@ function renderCases(b) {
   const current = STAGES.findIndex(([key]) => !c[key]);
   const open = (b.map.status?.open_bugs || {})[c.bug] && !b.prs[c.bug] && !c.closed;
   $("#case-body").innerHTML = `
-    <div class="case-title"><h2>${esc(c.title)}</h2><span class="chip ${kind}">${esc(label)}</span></div>
-    <p class="muted">${esc(c.bug)}${c.component ? ` · ${esc(comp)}` : ""}</p>
+    <div class="case-title"><h2>${esc(c.title)}</h2><span class="chip ${kind}"><span class="dot ${kind || "busy"}"></span>${esc(label)}</span></div>
+    <p class="muted mono-sm">${esc(c.bug)}${c.component ? ` · ${esc(comp)}` : ""}</p>
     ${open ? `<button class="btn" id="fix-this">Ask the crew to fix this</button>` : ""}
     <ol class="stages">${STAGES.map(([key, title, who], i) => stageRow(c, key, title, who, i, current)).join("")}</ol>`;
   $("#fix-this")?.addEventListener("click", () => action("fix", { bug: c.bug }));
@@ -491,7 +509,7 @@ function renderMap(b) {
     const cls = ["node", comp.entry && "entry", comp.asset && "asset", reached.has(id) && !comp.entry && "reached",
       open.has(id) && "open", id === fixComp && "next", scanning.has(id) && "scanning"].filter(Boolean).join(" ");
     const g = el("g", { class: cls, transform: `translate(${p.x},${p.y})` }, svg);
-    el("rect", { width: W, height: H, rx: 8 }, g);
+    el("rect", { width: W, height: H, rx: 6 }, g);
     const name = el("text", { x: 10, y: 22 }, g);
     name.textContent = (comp.name || id).slice(0, 22);
     const sub = el("text", { x: 10, y: 40, class: "sub" }, g);
@@ -503,9 +521,8 @@ function renderMap(b) {
   const breached = (status.breached_assets || []).length;
   body.insertAdjacentHTML("beforeend", `
     <p class="why">${breached ? `<b>An attacker can reach ${esc(namesOf(b, status.breached_assets))}.</b> ` : ""}${esc(b.map.reason || "")}</p>
-    <div class="legend"><span><i style="border-color:var(--info)"></i>entry point</span><span><i style="border-color:var(--text);border-width:2.5px"></i>holds data</span>
-    <span><i style="background:var(--bad-soft);border-color:var(--bad)"></i>open bug</span><span><i style="background:var(--warn-soft);border-color:var(--warn)"></i>reachable</span>
-    <span><i style="border-color:var(--accent);border-style:dashed"></i>fix next</span></div>`);
+    <div class="legend"><span><i class="l-entry"></i>entry point</span><span><i class="l-asset"></i>holds data</span>
+    <span><i class="l-open"></i>open bug</span><span><i class="l-reached"></i>reachable</span><span><i class="l-next"></i>fix next</span></div>`);
   $("#map-note").textContent = b.scanning ? `checking ${namesOf(b, b.patrol.components)}` : "";
 }
 

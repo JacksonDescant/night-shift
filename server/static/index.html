@@ -4,31 +4,45 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Night Shift</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M20 4a12 12 0 1 0 8 20A10 10 0 0 1 20 4z' fill='%236366f1'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111'/%3E%3Cpath d='M19 8a8.5 8.5 0 1 0 6 14.5A7 7 0 0 1 19 8z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#/" aria-label="Night Shift home">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M20 4a12 12 0 1 0 8 20A10 10 0 0 1 20 4z"/></svg>
-      <span>Night Shift</span>
-    </a>
-    <nav class="repo-switch" id="repo-switch" aria-label="Repositories"></nav>
-    <div class="topbar-actions">
-      <a class="btn ghost" href="#/setup">Crew setup</a>
-      <a class="btn ghost" href="#/connect">Connect repository</a>
-      <button class="btn ghost icon" id="open-settings" aria-label="Settings" title="Settings">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm8.3-2.6.1-1-.1-1 2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15.8 3h-3.9l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6-.1 1 .1 1-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h3.9l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z"/></svg>
-      </button>
-    </div>
-  </header>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#/" aria-label="Night Shift home">
+        <span class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M19 8a8.5 8.5 0 1 0 6 14.5A7 7 0 0 1 19 8z"/></svg></span>
+        <span>Night Shift</span>
+      </a>
+      <nav class="side-nav" aria-label="Dashboard">
+        <div class="side-label">Repositories</div>
+        <div class="repo-switch" id="repo-switch"></div>
+        <a class="side-link" href="#/connect" data-nav="connect">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>Connect repository</a>
+      </nav>
+      <nav class="side-nav side-foot" aria-label="Crew">
+        <a class="side-link" href="#/setup" data-nav="setup">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="6" r="2"/><circle cx="11" cy="6" r="2"/><path d="M2 13c.5-2 1.6-3 3-3s2.5 1 3 3m0 0c.5-2 1.6-3 3-3s2.5 1 3 3"/></svg>Crew setup</a>
+        <button class="side-link" id="open-settings" type="button">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5h10M3 11h10"/><circle cx="6" cy="5" r="1.6"/><circle cx="10" cy="11" r="1.6"/></svg>Settings</button>
+        <a class="side-link" href="https://github.com/JacksonDescant/night-shift" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3H3v10h10v-3M9 3h4v4M13 3 7 9"/></svg>Documentation</a>
+      </nav>
+    </aside>
 
-  <main id="view" tabindex="-1"></main>
+    <main id="view" tabindex="-1"></main>
+  </div>
 
   <dialog id="settings" aria-labelledby="settings-title">
     <form method="dialog" class="dialog-body" id="settings-form">
-      <h2 id="settings-title">Settings</h2>
-      <p class="muted">How the dashboard talks to the crew. These stay on this machine.</p>
+      <div>
+        <div class="eyebrow">Dashboard</div>
+        <h2 id="settings-title">Settings</h2>
+        <p class="muted">How the dashboard talks to the crew. These stay on this machine.</p>
+      </div>
       <label>Crew webhook URL
         <input name="crew_webhook_url" type="url" placeholder="The Watcher routine's webhook URL" autocomplete="off">
       </label>
@@ -36,7 +50,7 @@
         <input name="crew_webhook_auth" type="password" placeholder="Leave blank to keep the current value" autocomplete="off">
       </label>
       <label>Progress token for the crew
-        <span class="copy-row"><input name="ingest_token" readonly><button type="button" class="btn ghost" data-copy="ingest_token">Copy</button></span>
+        <span class="copy-row"><input name="ingest_token" readonly><button type="button" class="btn" data-copy="ingest_token">Copy</button></span>
         <small class="muted">The crew sets this as NIGHTSHIFT_TOKEN to post progress to this dashboard.</small>
       </label>
       <div class="dialog-actions">
@@ -48,8 +62,11 @@
 
   <dialog id="hook" aria-labelledby="hook-title">
     <form method="dialog" class="dialog-body">
-      <h2 id="hook-title">Wake the crew on every push</h2>
-      <p class="muted">In the repository on GitHub: Settings → Webhooks → Add webhook.</p>
+      <div>
+        <div class="eyebrow">Optional</div>
+        <h2 id="hook-title">Wake the crew on every push</h2>
+        <p class="muted">In the repository on GitHub: Settings → Webhooks → Add webhook.</p>
+      </div>
       <dl class="kv" id="hook-body"></dl>
       <div class="dialog-actions"><button class="btn primary" value="close">Done</button></div>
     </form>
