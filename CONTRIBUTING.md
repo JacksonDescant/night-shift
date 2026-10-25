@@ -9,7 +9,7 @@ Thanks for helping. A few ground rules keep Night Shift trustworthy:
 ## Development
 
 ```bash
-make install    # .venv with Night Shift and dev tools
+make install    # .venv with Night Shift and dev tools (./setup.sh does this too)
 make test
 make lint
 make dashboard  # http://127.0.0.1:8000

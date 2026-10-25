@@ -61,19 +61,18 @@ The crew uses the map to decide what to fix first. If a breach path exists, it f
 
 ## Getting started
 
-You need Python 3.11+, git, and (recommended) Docker. The crew runs on Grok Bots; see **[docs/crew-setup.md](docs/crew-setup.md)** for the full walkthrough.
+You need macOS or Linux, Python 3.11+, git, and a [Grok Bot](https://cursor.com/help/grok-bot/faqs) account. Docker is optional.
 
 ```bash
 git clone https://github.com/JacksonDescant/night-shift.git && cd night-shift
-make install        # creates .venv and installs Night Shift
-make dashboard      # http://127.0.0.1:8000
+./setup.sh
 ```
 
-1. **Set up the crew** once, following [docs/crew-setup.md](docs/crew-setup.md): four Grok Bots, their instructions from `bots/`, and `scripts/install-crew.sh` on their computer.
-2. **Open Settings** in the dashboard and paste the Watcher routine's webhook. Copy the progress token to the crew.
-3. **Connect a repository**: owner/name plus a fine-grained token for that repository.
-4. The crew **drafts a map** of the repository and opens it as a PR. Review it, adjust anything wrong, and merge it.
-5. From then on, every push (via the optional GitHub webhook), patrol or full sweep wakes the crew.
+That one script installs Night Shift, starts the dashboard at http://127.0.0.1:8000 with a public tunnel the crew can reach (it installs `cloudflared` with Homebrew if needed), and opens the dashboard. Keep it running while the crew works; run it again to start the dashboard later.
+
+The first time, the dashboard opens on **Set up the crew**: six short steps in Grok Bot (create the four Bots, their group chat, the Watcher's routine), each with the values already filled in and a copy button. Then **connect a repository** with owner/name and a fine-grained token for it. The crew drafts a map of the repository and opens it as a PR; review and merge it, and from then on every push, patrol or full sweep wakes the crew.
+
+The same steps, with background and troubleshooting, are in [docs/crew-setup.md](docs/crew-setup.md). To work on Night Shift itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## The map: `nightshift.yaml`
 

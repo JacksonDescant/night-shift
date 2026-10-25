@@ -54,6 +54,9 @@ async function route() {
     if (!repos.find((r) => r.slug === current)) { location.hash = "#/"; return; }
     selectedCase = null;
     await loadRepo();
+  } else if (hash === "setup" || (!repos.length && hash !== "connect" && !(await crewReady()))) {
+    current = null;
+    await renderSetup();
   } else if (hash === "connect" || !repos.length) {
     current = null;
     renderConnect();
@@ -70,6 +73,74 @@ function renderSwitch() {
     const dot = s.breached ? "bad" : s.waiting ? "warn" : s.busy ? "busy" : s.mapped ? "ok" : "";
     return `<a href="#/repo/${esc(r.slug)}" class="${r.slug === current ? "active" : ""}"><span class="dot ${dot}"></span>${esc(r.slug)}</a>`;
   }).join("");
+}
+
+// ---- crew setup -------------------------------------------------------------------------
+
+async function crewReady() {
+  const s = await api("/api/setup").catch(() => null);
+  return !s || Boolean(s.crew_webhook_url);
+}
+
+const ROUTINE = "Create a routine named \"Night Shift\" that runs when its webhook is called. When it runs: run " +
+  "`~/.nightshift/venv/bin/nightshift wake '<the JSON body exactly as received>'`, post the result in the Night Shift " +
+  "group chat, and hand off exactly as its HAND OFF line says. Give me the webhook URL and its Authorization header.";
+const GROUP = "This is our working channel. Hand off with @Name, one owner per step: Watcher → Triage Guard → Fixer → Night Manager. Remember that.";
+const RULES = "Allow automatically: running ~/.nightshift/venv/bin/nightshift commands, and file edits under ~/.nightshift/fixes/";
+
+function copyBlock(text, label = "Copy") {
+  const id = `copy-${copyBlock.n = (copyBlock.n || 0) + 1}`;
+  copyBlock.texts[id] = text;
+  return `<div class="copy-block"><pre>${esc(text)}</pre><button type="button" class="btn ghost" data-copy-text="${id}">${esc(label)}</button></div>`;
+}
+copyBlock.texts = {};
+
+async function renderSetup() {
+  const s = await api("/api/setup");
+  copyBlock.texts = {};
+  const server = s.public_url || "<your dashboard's public URL>";
+  const install = `curl -fsSL https://raw.githubusercontent.com/JacksonDescant/night-shift/main/scripts/install-crew.sh | ` +
+    `NIGHTSHIFT_SERVER="${server}" NIGHTSHIFT_TOKEN="${s.ingest_token}" bash`;
+  const step = (n, title, body) => `<li class="setup-step"><span class="mark">${n}</span><div><h2>${title}</h2>${body}</div></li>`;
+  $("#view").innerHTML = `
+    <section class="setup card">
+      <div class="card-body">
+        <div>
+          <h1>Set up the crew</h1>
+          <p class="muted">Night Shift's crew is four <a href="https://cursor.com/help/grok-bot/faqs" target="_blank" rel="noopener">Grok Bots</a>.
+          Do this once, top to bottom; every value below is already filled in for this dashboard.</p>
+          ${s.public_url ? "" : `<p class="error">No public URL: start the dashboard with <code>./setup.sh</code> so the crew can reach it.</p>`}
+        </div>
+        <ol class="setup-steps">
+          ${step(1, "Create a GitHub token for the crew", `<p class="muted">At <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens</a>:
+            only the repositories you'll connect; Contents and Pull requests, read and write. Keep it handy for step 4, and don't paste it into a chat.</p>`)}
+          ${step(2, "Create the four Bots", `<p class="muted">For each: in Grok Bot, <b>+ → Create new Bot</b> with this name, then paste its instructions as the first message.</p>
+            <div class="bot-prompts">${s.bots.map((b) => `<div class="bot-prompt"><b>${esc(b.name)}</b>
+              <button type="button" class="btn ghost" data-copy-text="${(copyBlock.texts[`bot-${b.key}`] = b.prompt, `bot-${b.key}`)}">Copy instructions</button></div>`).join("")}</div>`)}
+          ${step(3, "Make their group chat", `<p class="muted">Create a group chat named <b>Night Shift</b> with all four Bots and send:</p>${copyBlock(GROUP)}`)}
+          ${step(4, "Set up the Bots' computer", `<p class="muted">In any Bot's chat choose <b>Take over</b>, open a terminal, and run these two. The first asks for the token from step 1 (paste, Enter, Ctrl-D).</p>
+            ${copyBlock("gh auth login --with-token")}${copyBlock(install)}<p class="muted">Every line should end <code>[ok]</code>.</p>`)}
+          ${step(5, "Give the Watcher its routine", `<p class="muted">Send the Watcher:</p>${copyBlock(ROUTINE)}
+            <form id="setup-form" class="stack">
+              <label>Webhook URL it gives you<input name="crew_webhook_url" type="url" required autocomplete="off" value="${esc(s.crew_webhook_url)}"></label>
+              <label>Its Authorization header<input name="crew_webhook_auth" type="password" autocomplete="off" placeholder="${s.crew_webhook_auth_set ? "Set. Leave blank to keep it" : ""}"></label>
+              <div><button class="btn primary">Save</button></div>
+            </form>`)}
+          ${step(6, "Stop approvals from stalling it", `<p class="muted">In Grok Bot, <b>Settings → General → Auto-review → Custom Rules</b>, add:</p>${copyBlock(RULES)}`)}
+        </ol>
+        <div><a class="btn primary" href="#/connect">Connect a repository</a></div>
+      </div>
+    </section>`;
+  $("#setup-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    try {
+      await api("/api/settings", { method: "PUT", body: JSON.stringify({ crew_webhook_url: form.crew_webhook_url.value, crew_webhook_auth: form.crew_webhook_auth.value }) });
+      toast("Saved. Next, connect a repository");
+    } catch (err) {
+      toast(err.message);
+    }
+  });
 }
 
 // ---- connect ----------------------------------------------------------------------------
@@ -505,6 +576,11 @@ document.addEventListener("click", (e) => {
   if (!btn) return;
   const input = $(`[name="${btn.dataset.copy}"]`);
   navigator.clipboard?.writeText(input.value).then(() => toast("Copied"));
+});
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-copy-text]");
+  if (!btn) return;
+  navigator.clipboard?.writeText(copyBlock.texts[btn.dataset.copyText] || "").then(() => toast("Copied"));
 });
 $("#open-settings").addEventListener("click", openSettings);
 

@@ -37,6 +37,7 @@ def cmd_wake(args):
         payload = json.loads(raw) if raw.startswith("{") else {"trigger": raw or "full"}
     except ValueError:
         payload = {"trigger": "full"}
+    cfg.remember_server(payload.get("server"))
     slug = payload.get("repo") or cfg.current_task().get("repo")
     repo = cfg.load(workspace.clone(slug) if slug else cfg.find_repo().root)
     ok, message = workspace.sync(repo)

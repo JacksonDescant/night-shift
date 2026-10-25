@@ -163,6 +163,19 @@ def find_repo():
     raise SystemExit("Not inside a repository and no current task. Run `nightshift wake` or cd into the repo.")
 
 
+def remember_server(url):
+    """Save the dashboard's address the crew posts progress to (the tunnel URL changes per run)."""
+    if not re.match(r"^https://[A-Za-z0-9.-]+(:\d+)?/?$", url or ""):
+        return
+    url = url.rstrip("/")
+    os.environ["NIGHTSHIFT_SERVER"] = url
+    env = CREW_HOME / "env"
+    lines = [l for l in (env.read_text().splitlines() if env.exists() else []) if not l.startswith("NIGHTSHIFT_SERVER=")]
+    CREW_HOME.mkdir(parents=True, exist_ok=True)
+    env.write_text("\n".join(lines + [f"NIGHTSHIFT_SERVER={url}"]) + "\n")
+    env.chmod(0o600)
+
+
 def load_env():
     try:
         from dotenv import load_dotenv

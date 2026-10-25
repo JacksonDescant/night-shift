@@ -21,6 +21,8 @@ from fastapi.staticfiles import StaticFiles
 from server import board, store
 
 STATIC = Path(__file__).parent / "static"
+BOTS = Path(__file__).parent.parent / "bots"
+ROLES = {"watcher": "Watcher", "triage": "Triage Guard", "fixer": "Fixer", "manager": "Night Manager"}
 GITHUB = "https://api.github.com"
 SLUG = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 FIX_BRANCH = "nightshift/fix-"
@@ -108,6 +110,8 @@ async def wake(slug, trigger, detail, **extra):
         await emit(slug, "chat", {"bot": "Night Shift", "text": "No crew webhook set (Settings), so the crew wasn't woken."})
         return False
     payload = {"repo": slug, "trigger": trigger, "detail": detail, **extra}
+    if store.public_url():
+        payload["server"] = store.public_url()  # the tunnel changes per run; the crew follows it
     headers = {}
     if crew["webhook_auth"]:
         auth = crew["webhook_auth"]
@@ -270,6 +274,19 @@ def get_settings(request: Request):
     crew = store.crew()
     return {"crew_webhook_url": crew["webhook_url"], "crew_webhook_auth_set": bool(crew["webhook_auth"]),
             "ingest_token": store.ingest_token()}
+
+
+@app.get("/api/setup")
+def setup_info(request: Request):
+    """Everything the crew setup page needs: each Bot's instructions and the values to paste."""
+    require_local(request)
+    rules = (BOTS / "_rules.txt").read_text() if (BOTS / "_rules.txt").exists() else ""
+    prompts = {key: f"{(BOTS / f'{key}.md').read_text().strip()}\n\n{rules.strip()}\n"
+               for key in ROLES if (BOTS / f"{key}.md").exists()}
+    crew = store.crew()
+    return {"public_url": store.public_url(), "ingest_token": store.ingest_token(),
+            "bots": [{"key": k, "name": v, "prompt": prompts.get(k, "")} for k, v in ROLES.items()],
+            "crew_webhook_url": crew["webhook_url"], "crew_webhook_auth_set": bool(crew["webhook_auth"])}
 
 
 @app.put("/api/settings")

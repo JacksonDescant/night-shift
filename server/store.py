@@ -97,6 +97,11 @@ def ingest_token():
     return value
 
 
+def public_url():
+    """The dashboard's public address for the crew (setup.sh's tunnel), or ""."""
+    return os.environ.get("NIGHTSHIFT_PUBLIC_URL", "").rstrip("/")
+
+
 def crew():
     """How to wake the crew: the Watcher routine's webhook URL and its Authorization value."""
     return {"webhook_url": os.environ.get("NIGHTSHIFT_BOT_WEBHOOK") or _read("crew.json", {}).get("webhook_url", ""),
