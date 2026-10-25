@@ -4,6 +4,8 @@
 
 [![ci](https://github.com/JacksonDescant/night-shift/actions/workflows/ci.yml/badge.svg)](https://github.com/JacksonDescant/night-shift/actions/workflows/ci.yml)
 
+> **Winner of a SpaceXAI-sponsored prize** at ACM@UCSD's *Five Nights with AI* hackathon (October 2026), for its use of Grok Bots. See [Origin](#origin).
+
 Security scanners hand you a list. Night Shift hands you **evidence**: a test that fails on your current code, a minimal fix, the same test passing on the fix, and a record of exactly why the fix was or wasn't safe to merge without you.
 
 It's built for teams that want an always-on security reviewer without giving an AI the keys to production.
